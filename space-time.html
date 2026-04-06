@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Space Time Tracker</title>
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface-2: #1a1a26;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --text-dim: #6a6a80;
+    --accent: #a78bfa;
+    --accent-dim: rgba(167, 139, 250, 0.1);
+    --accent-glow: rgba(167, 139, 250, 0.15);
+    --green: #4ade80;
+    --green-dim: rgba(74, 222, 128, 0.1);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96, 165, 250, 0.1);
+    --orange: #fb923c;
+    --orange-dim: rgba(251, 146, 60, 0.1);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.1);
+    --cyan: #22d3ee;
+    --cyan-dim: rgba(34, 211, 238, 0.1);
+    --radius: 16px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .grain {
+    position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+
+  .app { max-width: 480px; margin: 0 auto; padding: 16px; padding-bottom: 100px; }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 32px 0 24px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 20%; right: 20%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+  .header h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 2rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .header .subtitle {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  /* Sync Banner */
+  .sync-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    margin-bottom: 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .sync-banner .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sync-banner.connected {
+    background: var(--green-dim);
+    border: 1px solid rgba(74, 222, 128, 0.2);
+    color: var(--green);
+  }
+  .sync-banner.connected .dot {
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  .sync-banner.disconnected {
+    background: var(--orange-dim);
+    border: 1px solid rgba(251, 146, 60, 0.25);
+    color: var(--orange);
+  }
+  .sync-banner.disconnected .dot { background: var(--orange); }
+  .sync-banner.error {
+    background: var(--red-dim);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    color: var(--red);
+  }
+  .sync-banner.error .dot { background: var(--red); }
+  .sync-banner .arrow { margin-left: auto; opacity: 0.5; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin: 24px 0 20px;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 4px;
+    border: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 0.75rem;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.3s;
+  }
+  .tab.active {
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  }
+  .card-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  /* ─── TAP BUTTON ─── */
+  .tap-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0 10px;
+  }
+  .tap-btn {
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .tap-btn .tap-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+  }
+  .tap-btn:active {
+    transform: scale(0.92);
+  }
+
+  /* Tap In state */
+  .tap-btn.state-out {
+    border-color: var(--accent);
+    box-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(167,139,250,0.05);
+  }
+  .tap-btn.state-out:hover {
+    box-shadow: 0 0 60px var(--accent-glow), 0 0 100px rgba(167,139,250,0.1);
+  }
+  .tap-btn.state-out .tap-icon { color: var(--accent); }
+
+  /* Tap Out state (currently inside) */
+  .tap-btn.state-in {
+    border-color: var(--red);
+    box-shadow: 0 0 40px var(--red-dim), 0 0 80px rgba(248,113,113,0.05);
+    animation: glow-red 3s ease-in-out infinite;
+  }
+  .tap-btn.state-in .tap-icon { color: var(--red); }
+  @keyframes glow-red {
+    0%, 100% { box-shadow: 0 0 40px var(--red-dim); }
+    50% { box-shadow: 0 0 60px rgba(248,113,113,0.15); }
+  }
+
+  .tap-status {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 16px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .tap-status strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* Live Timer */
+  .live-timer {
+    font-family: 'Instrument Serif', serif;
+    font-size: 3rem;
+    text-align: center;
+    margin: 16px 0 4px;
+    color: var(--cyan);
+    letter-spacing: 0.02em;
+    min-height: 56px;
+  }
+  .live-timer-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  /* Space Name Input */
+  .space-name-input {
+    width: 100%;
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    text-align: center;
+    outline: none;
+    margin-bottom: 12px;
+  }
+  .space-name-input:focus { border-color: var(--accent); }
+
+  /* Stats */
+  .stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .stat-value {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.5rem;
+    margin-bottom: 2px;
+  }
+  .stat-label {
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+
+  /* Chart */
+  .chart-container {
+    height: 200px;
+    position: relative;
+    margin: 12px 0;
+  }
+  canvas { width: 100% !important; height: 100% !important; }
+
+  /* Data Table */
+  .data-table {
+    width: 100%;
+    font-size: 0.7rem;
+  }
+  .data-table th {
+    text-align: left;
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+  .data-table td {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(42, 42, 58, 0.4);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--accent);
+    color: var(--bg);
+    padding: 12px 24px;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-family: 'DM Mono', monospace;
+    z-index: 1000;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    white-space: nowrap;
+  }
+  .toast.error { background: var(--red); }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Setup Panel */
+  .setup-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .setup-panel label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .setup-panel input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    outline: none;
+    margin-bottom: 16px;
+    word-break: break-all;
+  }
+  .setup-panel input[type="text"]:focus { border-color: var(--accent); }
+  .setup-panel .hint {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-top: -12px;
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .submit-btn { flex: 1; }
+
+  .submit-btn {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 8px;
+  }
+  .submit-btn:active { transform: scale(0.98); }
+  .submit-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    border: 1px solid rgba(167,139,250,0.3);
+    color: var(--accent);
+    font-size: 0.6rem;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .setup-step {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .setup-step code {
+    color: var(--accent);
+    font-size: 0.65rem;
+    background: var(--accent-dim);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .test-result {
+    font-size: 0.7rem;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-top: 12px;
+    display: none;
+    line-height: 1.6;
+  }
+  .test-result.success {
+    display: block;
+    background: var(--green-dim);
+    border: 1px solid rgba(74,222,128,0.2);
+    color: var(--green);
+  }
+  .test-result.fail {
+    display: block;
+    background: var(--red-dim);
+    border: 1px solid rgba(248,113,113,0.2);
+    color: var(--red);
+  }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .period-selector {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .period-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: none;
+    color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .period-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .nfc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 100px;
+    font-size: 0.65rem;
+    color: var(--accent);
+    margin-top: 16px;
+  }
+
+  /* Session tag in table */
+  .dur-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.65rem;
+    font-weight: 500;
+  }
+  .dur-short { background: var(--green-dim); color: var(--green); }
+  .dur-med   { background: var(--blue-dim); color: var(--blue); }
+  .dur-long  { background: var(--orange-dim); color: var(--orange); }
+  .dur-marathon { background: var(--red-dim); color: var(--red); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="app">
+  <div class="header">
+    <h1>Space Time</h1>
+    <div class="subtitle">Tap In &#183; Tap Out &#183; Track</div>
+  </div>
+
+  <div class="sync-banner disconnected" id="syncBanner" onclick="switchTab('setup')">
+    <span class="dot"></span>
+    <span id="syncText">Offline &#8212; tap to connect Google Sheets</span>
+    <span class="arrow">&#8594;</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="tap" onclick="switchTab('tap')">Tap</button>
+    <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab" data-tab="setup" onclick="switchTab('setup')">Setup</button>
+  </div>
+
+  <!-- TAP TAB -->
+  <div id="tab-tap" class="section active">
+    <div class="card">
+      <div class="card-label">Space Name</div>
+      <input class="space-name-input" id="spaceName" type="text" placeholder="e.g. Office, Gym, Library" value="">
+    </div>
+
+    <div class="card">
+      <div class="tap-zone">
+        <button class="tap-btn state-out" id="tapBtn" onclick="handleTap()">
+          <span class="tap-icon">&#9654;</span>
+          <span class="tap-label">Tap In</span>
+        </button>
+        <div class="tap-status" id="tapStatus">
+          Tap to start tracking your time
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="timerCard" style="display:none">
+      <div class="live-timer-label">Time Elapsed</div>
+      <div class="live-timer" id="liveTimer">0:00:00</div>
+    </div>
+
+    <div style="text-align:center">
+      <div class="nfc-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/>
+          <path d="M12.91 4.1a16.09 16.09 0 0 1 0 15.8"/><path d="M16.37 2a20.42 20.42 0 0 1 0 20"/>
+        </svg>
+        NFC Tap In / Tap Out
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD TAB -->
+  <div id="tab-dashboard" class="section">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="statTotal" style="color:var(--accent)">--</div>
+        <div class="stat-label">Total Sessions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statAvg" style="color:var(--cyan)">--</div>
+        <div class="stat-label">Avg Duration</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statToday" style="color:var(--green)">--</div>
+        <div class="stat-label">Today</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Daily Time Spent</div>
+      <div class="period-selector">
+        <button class="period-btn active" onclick="setPeriod('7d', this)">7D</button>
+        <button class="period-btn" onclick="setPeriod('30d', this)">30D</button>
+        <button class="period-btn" onclick="setPeriod('90d', this)">90D</button>
+        <button class="period-btn" onclick="setPeriod('all', this)">All</button>
+      </div>
+      <div class="chart-container">
+        <canvas id="dailyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Session Durations</div>
+      <div class="chart-container">
+        <canvas id="sessionChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Recent Sessions</div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Date</th><th>In</th><th>Out</th><th>Space</th><th>Duration</th></tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SETUP TAB -->
+  <div id="tab-setup" class="section">
+    <div class="setup-panel">
+      <label>Connect Google Sheets</label>
+      <div class="setup-step">
+        <span class="step-num">1</span>
+        <span>Create a Google Sheet. Go to <strong style="color:var(--text)">Extensions &#8594; Apps Script</strong>.</span>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">2</span>
+        <span>Paste <code>space-time-script.js</code>. Deploy as <strong style="color:var(--text)">Web App</strong> (Execute as: Me, Access: Anyone).</span>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">3</span>
+        <span>Paste the deployed URL below:</span>
+      </div>
+
+      <input type="text" id="apiUrl" placeholder="https://script.google.com/macros/s/...">
+
+      <label>Your Name / ID</label>
+      <input type="text" id="userId" placeholder="e.g. john">
+
+      <div class="btn-row">
+        <button class="submit-btn" onclick="saveSetup()" style="border-color:var(--blue);color:var(--blue);background:var(--blue-dim)">Save</button>
+        <button class="submit-btn" id="testBtn" onclick="testConnection()">Test Connection</button>
+      </div>
+      <div class="test-result" id="testResult"></div>
+    </div>
+
+    <div class="setup-panel">
+      <label>NFC Setup</label>
+      <div class="setup-step">
+        <span class="step-num">1</span>
+        <span>Get an NFC sticker (NTAG215)</span>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">2</span>
+        <span>Write URL:<br><code>https://YOU.github.io/space-time/</code></span>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">3</span>
+        <span>Stick near the entrance. Tap in when you arrive, tap out when you leave.</span>
+      </div>
+    </div>
+
+    <div class="setup-panel">
+      <label>Data Management</label>
+      <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:12px">
+        <span id="entryCount">0</span> sessions stored locally
+      </div>
+      <div class="btn-row">
+        <button class="submit-btn" onclick="exportLocal()" style="border-color:var(--orange);color:var(--orange);background:var(--orange-dim);margin-top:0">Export JSON</button>
+        <button class="submit-btn" onclick="forceSyncAll()" style="border-color:var(--blue);color:var(--blue);background:var(--blue-dim);margin-top:0">Force Sync</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── State ──
+let sessions = [];        // completed sessions
+let activeSession = null;  // { id, space, tapIn (ISO string) }
+let config = { apiUrl: '', userId: 'default' };
+let isConnected = false;
+let timerInterval = null;
+let dailyChart, sessionChartInst;
+let currentPeriod = '7d';
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+  loadLocalData();
+  loadActiveSession();
+  updateUI();
+  updateSyncBanner();
+  updateEntryCount();
+  renderDashboard();
+  if (config.apiUrl) fetchFromSheet();
+});
+
+// ── Tabs ──
+function switchTab(tab) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  const tabBtn = document.querySelector(`.tab[data-tab="${tab}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
+  if (tab === 'dashboard') renderDashboard();
+}
+
+// ── TAP HANDLER ──
+function handleTap() {
+  if (activeSession) {
+    tapOut();
+  } else {
+    tapIn();
+  }
+}
+
+function tapIn() {
+  const space = document.getElementById('spaceName').value.trim() || 'Unnamed';
+  const now = new Date();
+
+  activeSession = {
+    id: now.getTime().toString(),
+    space: space,
+    tapIn: now.toISOString()
+  };
+
+  saveActiveSession();
+  updateUI();
+  startTimer();
+  showToast('Tapped in &#10003; Timer started');
+}
+
+function tapOut() {
+  const now = new Date();
+  const tapInDate = new Date(activeSession.tapIn);
+  const durationMs = now - tapInDate;
+  const durationMin = Math.round(durationMs / 60000);
+
+  const session = {
+    id: activeSession.id,
+    space: activeSession.space,
+    date: tapInDate.toISOString().split('T')[0],
+    tapIn: tapInDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    tapOut: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    tapInISO: activeSession.tapIn,
+    tapOutISO: now.toISOString(),
+    durationMin: durationMin,
+    userId: config.userId
+  };
+
+  sessions.push(session);
+  saveLocalData();
+
+  // Sync to sheet
+  if (config.apiUrl) {
+    pushToSheet(session);
+  }
+
+  activeSession = null;
+  clearActiveSession();
+  stopTimer();
+  updateUI();
+  updateEntryCount();
+  showToast('Tapped out &#10003; ' + formatDuration(durationMin) + ' logged');
+}
+
+// ── Timer ──
+function startTimer() {
+  stopTimer();
+  updateTimerDisplay();
+  timerInterval = setInterval(updateTimerDisplay, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function updateTimerDisplay() {
+  if (!activeSession) return;
+  const elapsed = Date.now() - new Date(activeSession.tapIn).getTime();
+  const secs = Math.floor(elapsed / 1000);
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  document.getElementById('liveTimer').textContent =
+    h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+// ── UI Updates ──
+function updateUI() {
+  const btn = document.getElementById('tapBtn');
+  const status = document.getElementById('tapStatus');
+  const timerCard = document.getElementById('timerCard');
+  const spaceInput = document.getElementById('spaceName');
+
+  if (activeSession) {
+    btn.className = 'tap-btn state-in';
+    btn.querySelector('.tap-icon').innerHTML = '&#9724;';
+    btn.querySelector('.tap-label').textContent = 'Tap Out';
+    const tapTime = new Date(activeSession.tapIn).toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit'
+    });
+    status.innerHTML = 'Inside <strong>' + activeSession.space + '</strong> since ' + tapTime;
+    timerCard.style.display = 'block';
+    spaceInput.value = activeSession.space;
+    spaceInput.disabled = true;
+    startTimer();
+  } else {
+    btn.className = 'tap-btn state-out';
+    btn.querySelector('.tap-icon').innerHTML = '&#9654;';
+    btn.querySelector('.tap-label').textContent = 'Tap In';
+    status.textContent = 'Tap to start tracking your time';
+    timerCard.style.display = 'none';
+    document.getElementById('liveTimer').textContent = '0:00:00';
+    spaceInput.disabled = false;
+  }
+}
+
+// ── Sync Banner ──
+function updateSyncBanner() {
+  const banner = document.getElementById('syncBanner');
+  const text = document.getElementById('syncText');
+  if (!config.apiUrl) {
+    banner.className = 'sync-banner disconnected';
+    text.textContent = 'Offline \u2014 tap to connect Google Sheets';
+    isConnected = false;
+  } else if (isConnected) {
+    banner.className = 'sync-banner connected';
+    text.textContent = 'Syncing to Google Sheets';
+  } else {
+    banner.className = 'sync-banner error';
+    text.textContent = 'URL set but not verified \u2014 tap to test';
+  }
+}
+
+function updateEntryCount() {
+  const el = document.getElementById('entryCount');
+  if (el) el.textContent = sessions.length;
+}
+
+// ── Storage ──
+function saveLocalData() {
+  try { localStorage.setItem('st_sessions', JSON.stringify(sessions)); } catch(e) {}
+}
+function loadLocalData() {
+  try { sessions = JSON.parse(localStorage.getItem('st_sessions') || '[]'); } catch(e) { sessions = []; }
+}
+function saveActiveSession() {
+  try { localStorage.setItem('st_active', JSON.stringify(activeSession)); } catch(e) {}
+}
+function loadActiveSession() {
+  try { activeSession = JSON.parse(localStorage.getItem('st_active') || 'null'); } catch(e) { activeSession = null; }
+}
+function clearActiveSession() {
+  try { localStorage.removeItem('st_active'); } catch(e) {}
+}
+function saveConfig() {
+  try { localStorage.setItem('st_config', JSON.stringify(config)); } catch(e) {}
+}
+function loadConfig() {
+  try { config = JSON.parse(localStorage.getItem('st_config') || '{}'); } catch(e) { config = {}; }
+  if (!config.apiUrl) config.apiUrl = '';
+  if (!config.userId) config.userId = 'default';
+  document.getElementById('apiUrl').value = config.apiUrl;
+  document.getElementById('userId').value = config.userId;
+}
+
+function saveSetup() {
+  config.apiUrl = document.getElementById('apiUrl').value.trim();
+  config.userId = document.getElementById('userId').value.trim() || 'default';
+  saveConfig();
+  updateSyncBanner();
+  showToast('Configuration saved &#10003;');
+  if (config.apiUrl) fetchFromSheet();
+}
+
+// ── Sheet Sync ──
+async function pushToSheet(session) {
+  try {
+    const res = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(session)
+    });
+    if (res.ok || res.type === 'opaque') {
+      isConnected = true;
+      updateSyncBanner();
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error('Push failed:', e);
+    return false;
+  }
+}
+
+async function fetchFromSheet() {
+  if (!config.apiUrl) return;
+  try {
+    const url = config.apiUrl + '?action=get&userId=' + encodeURIComponent(config.userId);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    isConnected = true;
+    updateSyncBanner();
+    if (data && data.length) {
+      const sheetIds = new Set(data.map(e => e.id).filter(Boolean));
+      const unsynced = sessions.filter(e => e.id && !sheetIds.has(e.id));
+      sessions = [...data, ...unsynced];
+      saveLocalData();
+      updateEntryCount();
+      renderDashboard();
+      for (const s of unsynced) await pushToSheet(s);
+    }
+  } catch (e) {
+    console.error('Fetch failed:', e);
+    isConnected = false;
+    updateSyncBanner();
+  }
+}
+
+async function testConnection() {
+  const testBtn = document.getElementById('testBtn');
+  const resultEl = document.getElementById('testResult');
+  const url = document.getElementById('apiUrl').value.trim();
+
+  if (!url) {
+    resultEl.className = 'test-result fail';
+    resultEl.textContent = 'Paste your Google Apps Script URL above first.';
+    return;
+  }
+  if (!url.startsWith('https://script.google.com/')) {
+    resultEl.className = 'test-result fail';
+    resultEl.textContent = 'URL should start with https://script.google.com/macros/s/...';
+    return;
+  }
+
+  testBtn.disabled = true;
+  testBtn.textContent = 'Testing...';
+  resultEl.style.display = 'none';
+
+  try {
+    const res = await fetch(url + '?action=get&userId=__test__');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      isConnected = true;
+      resultEl.className = 'test-result success';
+      resultEl.innerHTML = '&#10003; Connected! API is responding.';
+      updateSyncBanner();
+    } else {
+      throw new Error('Unexpected response');
+    }
+  } catch (e) {
+    isConnected = false;
+    resultEl.className = 'test-result fail';
+    resultEl.innerHTML = '&#10007; Failed.<br>Check URL ends with /exec, deployed as Web App, access set to Anyone.<br>Error: ' + e.message;
+    updateSyncBanner();
+  }
+  testBtn.disabled = false;
+  testBtn.textContent = 'Test Connection';
+}
+
+async function forceSyncAll() {
+  if (!config.apiUrl) { showToast('Set API URL first', true); return; }
+  showToast('Syncing ' + sessions.length + ' sessions...');
+  let ok = 0, fail = 0;
+  for (const s of sessions) { (await pushToSheet(s)) ? ok++ : fail++; }
+  showToast(fail === 0 ? 'All ' + ok + ' synced &#10003;' : ok + ' synced, ' + fail + ' failed', fail > 0);
+}
+
+function exportLocal() {
+  const blob = new Blob([JSON.stringify(sessions, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'space-time-export.json'; a.click();
+  showToast('Exported ' + sessions.length + ' sessions &#10003;');
+}
+
+// ── Dashboard ──
+function renderDashboard() {
+  if (!sessions.length) {
+    document.getElementById('dataBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-dim)">No sessions yet</td></tr>';
+    return;
+  }
+
+  const sorted = [...sessions].sort((a, b) => {
+    const cmp = a.date.localeCompare(b.date);
+    return cmp !== 0 ? cmp : (a.id || '0').localeCompare(b.id || '0');
+  });
+
+  // Stats
+  const totalSessions = sorted.length;
+  const totalMin = sorted.reduce((s, e) => s + (e.durationMin || 0), 0);
+  const avgMin = Math.round(totalMin / totalSessions);
+
+  const today = new Date().toISOString().split('T')[0];
+  const todayMin = sorted.filter(e => e.date === today).reduce((s, e) => s + (e.durationMin || 0), 0);
+
+  document.getElementById('statTotal').textContent = totalSessions;
+  document.getElementById('statAvg').textContent = formatDuration(avgMin);
+  document.getElementById('statToday').textContent = formatDuration(todayMin);
+
+  const filtered = filterByPeriod(sorted, currentPeriod);
+  renderDailyChart(filtered);
+  renderSessionChart(filtered);
+
+  // Table
+  const recent = [...sorted].reverse().slice(0, 20);
+  document.getElementById('dataBody').innerHTML = recent.map(e => {
+    const dur = e.durationMin || 0;
+    const cls = dur < 30 ? 'dur-short' : dur < 120 ? 'dur-med' : dur < 300 ? 'dur-long' : 'dur-marathon';
+    return `<tr>
+      <td>${formatDateShort(e.date)}</td>
+      <td style="color:var(--green)">${e.tapIn || '--'}</td>
+      <td style="color:var(--red)">${e.tapOut || '--'}</td>
+      <td style="color:var(--text-dim)">${e.space || '--'}</td>
+      <td><span class="dur-tag ${cls}">${formatDuration(dur)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterByPeriod(data, period) {
+  const now = new Date();
+  let cutoff = new Date();
+  if (period === '7d') cutoff.setDate(now.getDate() - 7);
+  else if (period === '30d') cutoff.setDate(now.getDate() - 30);
+  else if (period === '90d') cutoff.setDate(now.getDate() - 90);
+  else return data;
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  return data.filter(e => e.date >= cutoffStr);
+}
+
+function setPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDashboard();
+}
+
+function renderDailyChart(data) {
+  // Aggregate by date
+  const byDate = {};
+  data.forEach(e => {
+    byDate[e.date] = (byDate[e.date] || 0) + (e.durationMin || 0);
+  });
+  const dates = Object.keys(byDate).sort();
+  const hours = dates.map(d => +(byDate[d] / 60).toFixed(1));
+
+  const ctx = document.getElementById('dailyChart').getContext('2d');
+  if (dailyChart) dailyChart.destroy();
+
+  dailyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dates.map(formatDateShort),
+      datasets: [{
+        data: hours,
+        backgroundColor: 'rgba(167, 139, 250, 0.4)',
+        borderColor: '#a78bfa',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#6a6a80', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 }
+        },
+        y: {
+          grid: { color: 'rgba(42,42,58,0.3)' },
+          ticks: { color: '#6a6a80', font: { family: 'DM Mono', size: 10 }, callback: v => v + 'h' },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+function renderSessionChart(data) {
+  const ctx = document.getElementById('sessionChart').getContext('2d');
+  if (sessionChartInst) sessionChartInst.destroy();
+
+  const labels = data.map((e, i) => formatDateShort(e.date));
+  const durations = data.map(e => +(( e.durationMin || 0) / 60).toFixed(2));
+
+  sessionChartInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: durations,
+        borderColor: '#22d3ee',
+        backgroundColor: 'rgba(34, 211, 238, 0.05)',
+        borderWidth: 2,
+        pointBackgroundColor: '#22d3ee',
+        pointBorderColor: '#0a0a0f',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          grid: { color: 'rgba(42,42,58,0.3)' },
+          ticks: { color: '#6a6a80', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 }
+        },
+        y: {
+          grid: { color: 'rgba(42,42,58,0.3)' },
+          ticks: { color: '#6a6a80', font: { family: 'DM Mono', size: 10 }, callback: v => v + 'h' },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+// ── Helpers ──
+function formatDuration(min) {
+  if (!min && min !== 0) return '--';
+  if (min < 60) return min + 'm';
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+}
+
+function formatDateShort(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.innerHTML = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  void t.offsetWidth;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
