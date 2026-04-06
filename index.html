@@ -891,17 +891,18 @@ function saveSetup() {
 // ── Sheet Sync ──
 async function pushToSheet(session) {
   try {
-    const res = await fetch(config.apiUrl, {
+    // Google Apps Script redirects (302) which breaks CORS for POST.
+    // Using no-cors: request goes through but we can't read response.
+    await fetch(config.apiUrl, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(session)
     });
-    if (res.ok || res.type === 'opaque') {
-      isConnected = true;
-      updateSyncBanner();
-      return true;
-    }
-    return false;
+    // With no-cors we assume success if no exception thrown
+    isConnected = true;
+    updateSyncBanner();
+    return true;
   } catch (e) {
     console.error('Push failed:', e);
     return false;
@@ -912,12 +913,23 @@ async function fetchFromSheet() {
   if (!config.apiUrl) return;
   try {
     const url = config.apiUrl + '?action=get&userId=' + encodeURIComponent(config.userId);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    const res = await fetch(url, { redirect: 'follow' });
+    const text = await res.text();
+
+    // GAS sometimes returns HTML error pages instead of JSON
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      console.error('Response is not JSON:', text.substring(0, 200));
+      isConnected = false;
+      updateSyncBanner();
+      return;
+    }
+
     isConnected = true;
     updateSyncBanner();
-    if (data && data.length) {
+    if (data && Array.isArray(data) && data.length) {
       const sheetIds = new Set(data.map(e => e.id).filter(Boolean));
       const unsynced = sessions.filter(e => e.id && !sheetIds.has(e.id));
       sessions = [...data, ...unsynced];
@@ -954,21 +966,75 @@ async function testConnection() {
   resultEl.style.display = 'none';
 
   try {
-    const res = await fetch(url + '?action=get&userId=__test__');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    const testUrl = url + '?action=get&userId=__test__';
+    const res = await fetch(testUrl, { redirect: 'follow' });
+    const text = await res.text();
+
+    // Try parsing as JSON
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      // Response is HTML (script error) — show helpful debug info
+      isConnected = false;
+      resultEl.className = 'test-result fail';
+
+      // Check for common GAS error patterns
+      if (text.includes('Exception') || text.includes('error')) {
+        resultEl.innerHTML = '&#10007; Script returned an error instead of JSON.<br><br>'
+          + '<strong>This usually means the Apps Script code has a bug.</strong><br><br>'
+          + 'Steps to fix:<br>'
+          + '1. Open Apps Script editor<br>'
+          + '2. Click <strong>Run &#8594; doGet</strong> to test manually<br>'
+          + '3. Check the Execution Log for errors<br>'
+          + '4. Make sure you pasted the <strong>space-time-script.js</strong> code (not body-metrics)<br><br>'
+          + '<details><summary style="cursor:pointer;color:var(--text-dim)">Raw response (first 300 chars)</summary>'
+          + '<pre style="margin-top:8px;font-size:0.6rem;white-space:pre-wrap;word-break:break-all;color:var(--text-dim)">'
+          + text.substring(0, 300).replace(/</g, '&lt;')
+          + '</pre></details>';
+      } else {
+        resultEl.innerHTML = '&#10007; Response is not valid JSON.<br><br>'
+          + 'Check that:<br>'
+          + '&#8226; URL ends with <strong>/exec</strong> (not /dev)<br>'
+          + '&#8226; Deploy type is "Web app"<br>'
+          + '&#8226; "Who has access" is set to <strong>"Anyone"</strong><br>'
+          + '&#8226; You clicked <strong>Deploy</strong> after saving the code<br><br>'
+          + '<details><summary style="cursor:pointer;color:var(--text-dim)">Raw response (first 300 chars)</summary>'
+          + '<pre style="margin-top:8px;font-size:0.6rem;white-space:pre-wrap;word-break:break-all;color:var(--text-dim)">'
+          + text.substring(0, 300).replace(/</g, '&lt;')
+          + '</pre></details>';
+      }
+      updateSyncBanner();
+      testBtn.disabled = false;
+      testBtn.textContent = 'Test Connection';
+      return;
+    }
+
+    // Got valid JSON
     if (Array.isArray(data)) {
+      isConnected = true;
+      resultEl.className = 'test-result success';
+      resultEl.innerHTML = '&#10003; Connected! API returned ' + data.length + ' entries. You\'re all set.';
+      updateSyncBanner();
+    } else if (data && data.status === 'ok') {
       isConnected = true;
       resultEl.className = 'test-result success';
       resultEl.innerHTML = '&#10003; Connected! API is responding.';
       updateSyncBanner();
     } else {
-      throw new Error('Unexpected response');
+      resultEl.className = 'test-result fail';
+      resultEl.innerHTML = '&#10007; Unexpected JSON response: ' + JSON.stringify(data).substring(0, 200);
     }
   } catch (e) {
     isConnected = false;
     resultEl.className = 'test-result fail';
-    resultEl.innerHTML = '&#10007; Failed.<br>Check URL ends with /exec, deployed as Web App, access set to Anyone.<br>Error: ' + e.message;
+    resultEl.innerHTML = '&#10007; Network error: <strong>' + e.message + '</strong><br><br>'
+      + 'This usually means a CORS issue. Try these fixes:<br>'
+      + '1. Open the URL directly in a new browser tab:<br>'
+      + '<code style="font-size:0.6rem;color:var(--accent);word-break:break-all">' + url + '?action=get&userId=test</code><br>'
+      + '2. If that shows JSON (like <code>[]</code>), the script works but CORS is blocked.<br>'
+      + '3. Re-deploy: Apps Script &#8594; Deploy &#8594; <strong>New deployment</strong> (not "Manage") &#8594; Web App &#8594; Anyone.<br>'
+      + '4. Use the <strong>new URL</strong> from the new deployment.';
     updateSyncBanner();
   }
   testBtn.disabled = false;
